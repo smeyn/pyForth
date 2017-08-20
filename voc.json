@@ -1,0 +1,82 @@
+[
+   {
+    "prim": true,
+    "name": "!",
+    "func": "forth_store"
+   }
+  , {
+    "prim": true,
+    "name": ".",
+    "func": "forth_print"
+  }
+  ,{
+     "prim": true,
+    "name": ".s",
+    "func": "forth_print_stack"
+   }
+  ,{
+     "prim": true,
+    "name": "dup",
+    "func": "dup"
+   }
+  ,{
+     "prim": true,
+    "name": "drop",
+    "func": "drop"
+   }
+  ,{
+     "prim": true,
+    "name": "swap",
+    "func": "swap"
+   }
+  ,{
+     "prim": true,
+    "name": "rot",
+    "func": "rot"
+   }
+  ,{
+     "prim": true,
+    "name": "#",
+    "func": "forth_sharp"
+   }
+  ,{
+     "prim": true,
+    "name": ".",
+    "func": "forth_print"
+   }
+  ,{
+     "prim": true,
+    "name": ".",
+    "func": "forth_print"
+   }
+  ,{
+     "prim": true,
+    "name": ".",
+    "func": "forth_print"
+   }
+  ,{
+     "prim": true,
+    "name": ".",
+    "func": "forth_print"
+   }
+  ,{
+     "prim": true,
+    "name": ".",
+    "func": "forth_print"
+   }
+  ,{
+     "prim": true,
+    "name": ".",
+    "func": "forth_print"
+   }
+  ,{
+     "prim": true,
+    "name": ".",
+    "func": "forth_print"
+   }
+  ,{
+     "prim": true,
+    "name": ".",
+    "func": "forth_print"
+   }
+]
