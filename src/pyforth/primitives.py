@@ -1,20 +1,32 @@
-"""
-==========
-primitives
-==========
-Implement the primitive words for PyForth
+"""Implement the primitive words for PyForth"""
 
-"""
+from __future__ import annotations
+
 import logging
-from calendar import formatstring
-from Exceptions import WordNotFoundError, ExecutionError
+
+# from calendar import formatstring
+from pyforth.exceptions import WordNotFoundError, ExecutionError
+
+# pylint: disable="invalid-name"
+# pylint: disable="logging-format-interpolation"
+# pylint: disable="missing-function-docstring"
+# pylint: disable="consider-using-f-string"
+# pylint: disable="protected-access"
+# pylint: disable="unused-argument"
+
 
 class CompiledCode(object):
     """
     CompiledCode is an object containing the compiled code of a word.
     """
 
-    def __init__(self, name="AnonCompiled", isImmediate = False, executeOnly=False, inColonOnly=False):
+    def __init__(
+        self,
+        name="AnonCompiled",
+        isImmediate=False,
+        executeOnly=False,
+        inColonOnly=False,
+    ):
         """
         :type name: str, name of the word definition
         :type isImmediate: bool, if true then the word will be executed even if in compulation mode
@@ -27,15 +39,16 @@ class CompiledCode(object):
         self.code = []
         self.name = name
         self.docstring = []
-        self.meta={}
+        self.meta = {}
+        self.xp = 0
 
     def __str__(self):
         return "CompiledCode {}".format(self.name)
 
-    def execute(self, engine, caller):
-        '''
+    def execute(self, engine, caller: CompiledCode):
+        """
         execute the code
-        '''
+        """
         # logging.debug("about to execute CompiledCode '{}'".format(self.name))
         self.xp = 0
         while self.xp < len(self.code):
@@ -44,8 +57,10 @@ class CompiledCode(object):
             self.xp = self.xp + 1
             try:
                 nextWord.execute(engine, self)
-            except Exception as ex:
-                logging.error("Execute of word {}, xp= {}".format(self.name, self.xp-1))
+            except Exception:
+                logging.error(
+                    "Execute of word {}, xp= {}".format(self.name, self.xp - 1)
+                )
                 raise
 
     @property
@@ -57,11 +72,12 @@ class CompiledCode(object):
         self.xp = addr
 
     def jumpRelative(self, distance):
-        """helper - jump relative """
+        """helper - jump relative"""
         self.xp += distance
 
     def branch(self):
-        """ take the next primitive, which should be  a constant and do a relative jump based on its value."""
+        """take the next primitive, which should be  a constant
+        and do a relative jump based on its value."""
         offset = self.code[self.xp]
         logging.debug("branching by {}".format(offset.constantValue))
         self.jumpRelative(offset.constantValue)
@@ -71,37 +87,47 @@ class CompiledCode(object):
         logging.debug("adding doc string '{}'".format(quote))
         self.docstring.append(quote)
 
-class CompiledPrimitive():
+
+class CompiledPrimitive:
     """
     a compiled primitive will when executed invole the function called func.
     """
-    def __init__(self, func, name="AnonPrimitive", isImmediate=False, executeOnly=False, inColonOnly=False):
+
+    def __init__(
+        self,
+        func,
+        name="AnonPrimitive",
+        isImmediate=False,
+        executeOnly=False,
+        inColonOnly=False,
+    ):
         self.func = func
         self.name = name
         self.isImmediate = isImmediate
         self.executeOnly = executeOnly
         self.inColonOnly = inColonOnly
-        self.meta={}
+        self.meta = {}
 
     def __str__(self):
         return "CompiledPrimitive {}".format(self.name)
 
-    def execute(self, engine, caller):
+    def execute(self, engine, caller: CompiledCode):
         # logging.debug("about to execute primitive'{}'".format(self.name))
         self.func(engine, caller)
 
 
-class CompiledConstant():
+class CompiledConstant:
     """
     Compiled Constants is a primitive that will push a constant on the stack
     """
+
     def __init__(self, constVal):
         self.constantValue = constVal
 
     def __str__(self):
         return "CompiledConstant '{}'".format(self.constantValue)
 
-    def execute(self, engine, caller):
+    def execute(self, engine, caller: CompiledCode):
         # logging.debug("about to execute constant'{}'".format(self.constantValue))
         engine.stack.append(self.constantValue)
 
@@ -118,9 +144,17 @@ class forthprim:
 
     this will take the next function and instantiate a CompiledPrimitive and stick it intoa vocabulary."
     """
+
     global vocabulary
 
-    def __init__(self, name, isImmediate=False, executeOnly=False, inColonOnly=False, voc=vocabulary):
+    def __init__(
+        self,
+        name,
+        isImmediate=False,
+        executeOnly=False,
+        inColonOnly=False,
+        voc=vocabulary,
+    ):
         self.name = name
         self.isImmediate = isImmediate
         self.executeOnly = executeOnly
@@ -130,12 +164,18 @@ class forthprim:
 
     def __call__(self, f):
         # print("Decorating '{}->{}'".format(f.__name__, self.name))
-        self.voc[self.name] = CompiledPrimitive(f, name=self.name, isImmediate=self.isImmediate,
-                                                executeOnly=self.executeOnly, inColonOnly=self.inColonOnly)
+        self.voc[self.name] = CompiledPrimitive(
+            f,
+            name=self.name,
+            isImmediate=self.isImmediate,
+            executeOnly=self.executeOnly,
+            inColonOnly=self.inColonOnly,
+        )
 
 
 @forthprim(".")
-def forth_print(engine, caller):
+def forth_print(engine, caller: CompiledCode):
+    """print TOS"""
     sp = engine.stack
     top = sp[-1]
     sp.pop()
@@ -143,10 +183,10 @@ def forth_print(engine, caller):
 
 
 @forthprim('."', isImmediate=True)
-def dot_quote(engine, caller):
+def dot_quote(engine, caller: CompiledCode):
     """fetch the next words up and until then next quote char.
     if compiling then compile this as a string constant and a print , otherwise print it out"""
-    s = engine.getInputTill('"')[1:]
+    s = engine.get_input_till('"')[1:]
     if engine.isCompiling:
         engine.compileConstant(s)
         engine.compileWord(".")
@@ -155,27 +195,74 @@ def dot_quote(engine, caller):
 
 
 @forthprim("!")
-def store(engine, caller):
+def store(engine, caller: CompiledCode):
     addr = engine.pop()
     n = engine.pop()
     engine.mem[addr] = n
 
 
 @forthprim("@")
-def fetch(engine, caller):
+def fetch(engine, caller: CompiledCode):
     addr = engine.pop()
     engine.push(engine.mem[addr])
 
+@forthprim("FILL")
+def fill(engine, caller: CompiledCode):
+    """fill memory at add with u elements b
+    ( addr u b ->)
+    """
+    addr, u, b = engine.pop(3)
+    engine.fillMem(addr, u, b)
+
+
+@forthprim("MOVE")
+def move(engine, caller: CompiledCode):
+    """ move u items in memory 
+    ( from to u->)
+    """
+    origin, dest, nrItems = engine.pop(3)
+    engine.moveMem(origin, dest, nrItems)
+
+
+@forthprim("ERASE")
+def erase(engine, caller: CompiledCode):
+    """ erase u items in memory 
+    ( addr   u->)
+    """
+    addr, nrItems = engine.pop(2)
+    engine.fillMem(addr, nrItems, None)
+
+@forthprim("BLANKS")
+def blanks(engine, caller: CompiledCode):
+    """ set u blanks in memory 
+    ( addr   u->)
+    """
+    addr, nrItems = engine.pop(2)
+    engine.fillMem(addr, nrItems, " ")
+
+@forthprim("TOGGLE")
+def toggle(engine, caller: CompiledCode):
+    """ XOR item  in memory with b
+    ( addr  b ->)
+    """
+    addr, val = engine.pop(2)
+    if not isinstance(val, int):
+        raise ValueError(f'XOR requires an integer value, found "{va}"')
+    target = engine.mem[addr]
+    if not isinstance(target, int):
+        raise ValueError(f'XOR requires an integer target, found "{target} at {addr}"')    
+    engine.mem[addr] = target ^ val
+
 
 @forthprim("*")
-def forthMul(engine, caller):
+def forthMul(engine, caller: CompiledCode):
     sp = engine.stack
     n = sp.pop() * sp.pop()
     sp.append(n)
 
 
 @forthprim("*/")
-def forthMulDiv(engine, caller):
+def forthMulDiv(engine, caller: CompiledCode):
     sp = engine.stack
     n3 = sp.pop()
     n = sp.pop() * sp.pop() / n3
@@ -183,7 +270,7 @@ def forthMulDiv(engine, caller):
 
 
 @forthprim("/")
-def forthDiv(engine, caller):
+def forthDiv(engine, caller: CompiledCode):
     sp = engine.stack
     divisor = sp.pop()
     n = sp.pop() / divisor
@@ -191,7 +278,7 @@ def forthDiv(engine, caller):
 
 
 @forthprim("+")
-def forthAdd(engine, caller):
+def forthAdd(engine, caller: CompiledCode):
     sp = engine.stack
     a = sp.pop()
     n = sp.pop() + a
@@ -199,7 +286,7 @@ def forthAdd(engine, caller):
 
 
 @forthprim("-")
-def forthSubtract(engine, caller):
+def forthSubtract(engine, caller: CompiledCode):
     sp = engine.stack
     n2 = sp.pop()
     n = sp.pop() - n2
@@ -207,26 +294,26 @@ def forthSubtract(engine, caller):
 
 
 @forthprim("OR")
-def forthOr(engine, caller):
-    """ n1 n2 -> n3"""
+def forthOr(engine, caller: CompiledCode):
+    """n1 n2 -> n3"""
     engine.push(engine.pop() or engine.pop())
 
 
 @forthprim("XOR")
-def forthXor(engine, caller):
-    """ n1 n2 -> n3"""
+def forthXor(engine, caller: CompiledCode):
+    """n1 n2 -> n3"""
     engine.push(engine.pop() ^ engine.pop())
 
 
 @forthprim("+!")
-def forthSubtract(engine, caller):
+def forth_plus_bang(engine, caller: CompiledCode):
     sp = engine.stack
     addr = sp.pop()
     engine.mem[addr] += sp.pop()
 
 
 @forthprim("+-")
-def forthchangeSigne(engine, caller):
+def forthchangeSigne(engine, caller: CompiledCode):
     """n1 n2 -> n3
     apply sign of n2 on n1"""
     sp = engine.stack
@@ -236,7 +323,7 @@ def forthchangeSigne(engine, caller):
 
 
 @forthprim("-DUP")
-def minusDup(engine, caller):
+def minusDup(engine, caller: CompiledCode):
     """n1 -> n1  if n1  == 0
     n1 -> n1 n1 if n1 != 0"""
     sp = engine.stack
@@ -245,31 +332,31 @@ def minusDup(engine, caller):
 
 
 @forthprim("0<")
-def ltzero(engine, caller):
+def ltzero(engine, caller: CompiledCode):
     sp = engine.stack
     sp.append(sp.pop() < 0)
 
 
 @forthprim("0=")
-def eqzero(engine, caller):
+def eqzero(engine, caller: CompiledCode):
     sp = engine.stack
     sp.append(sp.pop() == 0)
 
 
 @forthprim("1+")
-def inc1(engine, caller):
+def inc1(engine, caller: CompiledCode):
     sp = engine.stack
     sp[-1] += 1
 
 
 @forthprim("2+")
-def inc2(engine, caller):
+def inc2(engine, caller: CompiledCode):
     sp = engine.stack
     sp[-1] += 2
 
 
 @forthprim("<")
-def lt(engine, caller):
+def lt(engine, caller: CompiledCode):
     sp = engine.stack
     n2 = sp.pop()
     n1 = sp.pop()
@@ -277,7 +364,7 @@ def lt(engine, caller):
 
 
 @forthprim("=")
-def eq(engine, caller):
+def eq(engine, caller: CompiledCode):
     sp = engine.stack
     n2 = sp.pop()
     n1 = sp.pop()
@@ -285,23 +372,15 @@ def eq(engine, caller):
 
 
 @forthprim(">")
-def gt(engine, caller):
+def gt(engine, caller: CompiledCode):
     sp = engine.stack
     n2 = sp.pop()
     n1 = sp.pop()
     sp.append(n1 > n2)
 
 
-@forthprim("<")
-def lt(engine, caller):
-    sp = engine.stack
-    n2 = sp.pop()
-    n1 = sp.pop()
-    sp.append(n1 < n2)
-
-
 @forthprim(">=")
-def ge(engine, caller):
+def ge(engine, caller: CompiledCode):
     sp = engine.stack
     n2 = sp.pop()
     n1 = sp.pop()
@@ -309,7 +388,7 @@ def ge(engine, caller):
 
 
 @forthprim("<=")
-def le(engine, caller):
+def le(engine, caller: CompiledCode):
     sp = engine.stack
     n2 = sp.pop()
     n1 = sp.pop()
@@ -317,37 +396,35 @@ def le(engine, caller):
 
 
 @forthprim("?")
-def gt(engine, caller):
+def question_mark(engine, caller: CompiledCode):
     sp = engine.stack
     addr = sp.pop()
     print(engine.mem[addr])
 
 
-
-
 @forthprim(":")
-def startCompile(engine, caller):
+def startCompile(engine, caller: CompiledCode):
     methodName = engine.nextWord()
     engine.startCompiling(methodName)
 
 
 @forthprim(";", isImmediate=True, inColonOnly=True)
-def endCompile(engine, caller):
+def endCompile(engine, caller: CompiledCode):
     engine.completeCompile()
 
 
 @forthprim("DUP")
-def forthDup(engine, caller):
+def forthDup(engine, caller: CompiledCode):
     engine.stack.append(engine.stack[-1])
 
 
 @forthprim("DROP")
-def forthDrop(engine, caller):
+def forthDrop(engine, caller: CompiledCode):
     engine.pop()
 
 
 @forthprim("ROT")
-def forthdrop(engine, caller):
+def forthdrop(engine, caller: CompiledCode):
     """n1 n2 n3 -> n2 n3 n1"""
     n3 = engine.pop()
     n2 = engine.pop()
@@ -358,14 +435,14 @@ def forthdrop(engine, caller):
 
 
 @forthprim("OVER")
-def forthover(engine, caller):
+def forthover(engine, caller: CompiledCode):
     """n1 n2 -> n1 n2 n1"""
     n1 = engine.stack[-2]
     engine.push(n1)
 
 
 @forthprim("SWAP")
-def forthover(engine, caller):
+def swap(engine, caller: CompiledCode):
     """n1 n2 -> n2 n1"""
     n2 = engine.pop()
     n1 = engine.pop()
@@ -373,58 +450,55 @@ def forthover(engine, caller):
     engine.push(n1)
 
 
-
-"""Return Stack"""
+# Return Stack
 @forthprim(">R")
-def toR(engine, caller):
+def toR(engine, caller: CompiledCode):
     """move TOS to Return stack
     ( n -> )"""
     engine.rp.append(engine.pop())
 
 
 @forthprim("R>")
-def toR(engine, caller):
+def r_to(engine, caller: CompiledCode):
     """move top of Return stack to stack
     (  -> n)"""
     engine.push(engine.rp.pop())
 
 
 @forthprim("R")
-def toR(engine, caller):
+def forth_r(engine, caller: CompiledCode):
     """copy top of Return stack to stack
     (  -> n)"""
     engine.push(engine.rp[-1])
-
 
 
 """looping"""
 
 
 @forthprim("I")
-def forthI(engine, caller):
+def forthI(engine, caller: CompiledCode):
     engine.push(engine.rp[-1])
 
 
 @forthprim("DO", isImmediate=True)
-def forthDo(engine, caller):
+def forthDo(engine, caller: CompiledCode):
     """set a marker for the LOOP statement
     ( I Limit -- )
     """
-    engine.compileWord(">R")  #Limit
-    engine.compileWord(">R")   # I
+    engine.compileWord(">R")  # Limit
+    engine.compileWord(">R")  # I
 
     engine.stack.append(len(engine.compilingMethod.code))  # address of compiled (DO)
     engine.stack.append("DOFLAG")
     engine.compileWord("(DO)")
     engine.compileWord("0BRANCH")
-    engine.compileConstant(0)       # at addr + 2
-
+    engine.compileConstant(0)  # at addr + 2
 
 
 @forthprim("(DO)")
-def forthRunTimeDo(engine, caller):
+def forthRunTimeDo(engine, caller: CompiledCode):
     """push start index and loop limit onto return stack"""
-    index =engine.rp[-1]
+    index = engine.rp[-1]
     limit = engine.rp[-2]
     if index >= limit:
         engine.push(0)
@@ -432,40 +506,40 @@ def forthRunTimeDo(engine, caller):
         engine.push(1)
 
 
-
 @forthprim("LOOP", isImmediate=True)
-def forthLoop(engine, caller):
+def forthLoop(engine, caller: CompiledCode):
     """compile a decrement i and jump to marker"""
     if "DOFLAG" != engine.pop():
         raise ValueError("LOOP statement did not see a paired DO")
     engine.compileWord("(LOOP)")
     doAddr = engine.pop()
-    engine.compileConstant(doAddr - len(engine.compilingMethod.code)) # constant for the branch of the (LOOP)
+    engine.compileConstant(
+        doAddr - len(engine.compilingMethod.code)
+    )  # constant for the branch of the (LOOP)
 
     # fixup the const for the 0Branch after the (DO) word
-    branchConst = engine.compilingMethod.code[doAddr+2]
+    branchConst = engine.compilingMethod.code[doAddr + 2]
     branchConst.constantValue = len(engine.compilingMethod.code) - doAddr - 2
 
 
-
 @forthprim("+LOOP", isImmediate=True)
-def forthPlusLoop(engine, caller):
-    """compile a decrement i and jump to marker
-
-    """
+def forthPlusLoop(engine, caller: CompiledCode):
+    """compile a decrement i and jump to marker"""
     if "DOFLAG" != engine.pop():
         raise ValueError("LOOP statement did not see a paired DO")
     engine.compileWord("(+LOOP)")
     doAddr = engine.pop()
-    engine.compileConstant(doAddr - len(engine.compilingMethod.code)) # constant for the branch of the (LOOP)
+    engine.compileConstant(
+        doAddr - len(engine.compilingMethod.code)
+    )  # constant for the branch of the (LOOP)
 
     # fixup the const for the 0Branch after the (DO) word
-    branchConst = engine.compilingMethod.code[doAddr+2]
+    branchConst = engine.compilingMethod.code[doAddr + 2]
     branchConst.constantValue = len(engine.compilingMethod.code) - doAddr - 2
 
 
 @forthprim("(LOOP)", executeOnly=True)
-def forthDoLoop(engine, caller):
+def forthDoLoop(engine, caller: CompiledCode):
     """compile a decrement i and jump to marker
     (  -- )
     """
@@ -473,9 +547,8 @@ def forthDoLoop(engine, caller):
     caller.branch()
 
 
-
 @forthprim("(+LOOP)", executeOnly=True)
-def forthDoPlusLoop(engine, caller):
+def forthDoPlusLoop(engine, caller: CompiledCode):
     """compile a decrement i and jump to marker
     (inc --  )
     """
@@ -484,15 +557,14 @@ def forthDoPlusLoop(engine, caller):
     caller.branch()
 
 
-
 @forthprim("BEGIN", isImmediate=True)
-def ForthBegin(engine, caller):
+def ForthBegin(engine, caller: CompiledCode):
     engine.stack.append(len(engine.compilingMethod.code))
     engine.stack.append("BEGINFLAG")
 
 
 @forthprim("UNTIL", isImmediate=True)
-def ForthUntil(engine, caller):
+def ForthUntil(engine, caller: CompiledCode):
     if "BEGINFLAG" != engine.pop():
         raise ValueError("UNTIL statement did not see a paired BEGIN")
     addr = engine.pop()
@@ -501,7 +573,7 @@ def ForthUntil(engine, caller):
 
 
 @forthprim("WHILE", isImmediate=True)
-def ForthWhile(engine, caller):
+def ForthWhile(engine, caller: CompiledCode):
     flag = engine.pop()
     if flag != "BEGINFLAG":
         raise ValueError("WHILE statement did not see a paired BEGIN")
@@ -513,7 +585,7 @@ def ForthWhile(engine, caller):
 
 
 @forthprim("REPEAT", isImmediate=True)
-def ForthRepeat(engine, caller):
+def ForthRepeat(engine, caller: CompiledCode):
     flag = engine.pop()
     if flag != "WHILEFLAG":
         raise ValueError("REPEAT statement did not see a paired WHILE")
@@ -523,21 +595,25 @@ def ForthRepeat(engine, caller):
     addr = len(engine.compilingMethod.code)
     engine.compileConstant(beginAddr - addr)
     # update the branch distance at the WHILE
-    branchDistance = engine.compilingMethod.code[whileAddr]  # get the JUMP constant at the WHILE statement
-    branchDistance.constantValue = len(engine.compilingMethod.code) - whileAddr  # update it to point past this code
+    branchDistance = engine.compilingMethod.code[
+        whileAddr
+    ]  # get the JUMP constant at the WHILE statement
+    branchDistance.constantValue = (
+        len(engine.compilingMethod.code) - whileAddr
+    )  # update it to point past this code
 
 
 """branching"""
 
 
 @forthprim("BRANCH")
-def forthBranch(engine, caller):
+def forthBranch(engine, caller: CompiledCode):
     """jump relative to current position"""
     caller.branch()
 
 
 @forthprim("0BRANCH")
-def forthZeroBranch(engine, caller):
+def forthZeroBranch(engine, caller: CompiledCode):
     """jump relative to current position if TOS is zero (or False"""
     flag = engine.pop()
     if (flag == 0) or not flag:
@@ -547,7 +623,7 @@ def forthZeroBranch(engine, caller):
 
 
 @forthprim("IF", isImmediate=True)
-def compileIf(engine, caller):
+def compileIf(engine, caller: CompiledCode):
     """compile a 0branch and a temporary zero constant. leave location of that constant on stack"""
     engine.compileWord("0BRANCH")
     engine.compileConstant(0)
@@ -556,7 +632,7 @@ def compileIf(engine, caller):
 
 
 @forthprim("ELSE", isImmediate=True)
-def compileElse(engine, caller):
+def compileElse(engine, caller: CompiledCode):
     engine.compileWord("BRANCH")
     engine.compileConstant(0)
     addr = len(engine.compilingMethod.code) - 1
@@ -564,29 +640,43 @@ def compileElse(engine, caller):
     if flag != "DOIF":
         raise ValueError("ELSE statement did not see a paired IF")
     branchValueLocation = engine.pop()
-    branchDistance = engine.compilingMethod.code[branchValueLocation]  # get the constant with the jump distance
-    branchDistance.constantValue = len(engine.compilingMethod.code) - branchValueLocation
+    branchDistance = engine.compilingMethod.code[
+        branchValueLocation
+    ]  # get the constant with the jump distance
+    branchDistance.constantValue = (
+        len(engine.compilingMethod.code) - branchValueLocation
+    )
     logging.debug(
-        "Compiling ELSE: fixing up branch value at {} to {}".format(branchValueLocation, branchDistance.constantValue))
+        "Compiling ELSE: fixing up branch value at {} to {}".format(
+            branchValueLocation, branchDistance.constantValue
+        )
+    )
     engine.push(addr)
     engine.push("DOIF")  # flag
 
 
 @forthprim("ENDIF", isImmediate=True)
-def compileEndif(engine, caller):
+def compileEndif(engine, caller: CompiledCode):
     flag = engine.pop()
     if flag != "DOIF":
         raise ValueError("ENDIF statement did not see a paired IF")
 
     branchValueLocation = engine.pop()
-    branchDistance = engine.compilingMethod.code[branchValueLocation]  # get the constant with the jump distance
-    branchDistance.constantValue = len(engine.compilingMethod.code) - branchValueLocation  # relative jump
+    branchDistance = engine.compilingMethod.code[
+        branchValueLocation
+    ]  # get the constant with the jump distance
+    branchDistance.constantValue = (
+        len(engine.compilingMethod.code) - branchValueLocation
+    )  # relative jump
     logging.debug(
-        "Compiling Endif: fixing up branch value at {} to {}".format(branchValueLocation, branchDistance.constantValue))
+        "Compiling Endif: fixing up branch value at {} to {}".format(
+            branchValueLocation, branchDistance.constantValue
+        )
+    )
 
 
 @forthprim("VARIABLE")
-def compileVariable(engine, caller):
+def compileVariable(engine, caller: CompiledCode):
     """compile a word, that when called will leave an address of a variable, which then can be used with @ and !"""
     varName = engine.nextWord()
     engine.startCompiling(varName)
@@ -596,7 +686,7 @@ def compileVariable(engine, caller):
 
 
 @forthprim("CONSTANT")
-def compileConstant(engine, caller):
+def compileConstant(engine, caller: CompiledCode):
     """compile a constant, that when called will push the constant value on the stack"""
     varName = engine.nextWord()
     engine.startCompiling(varName)
@@ -605,18 +695,20 @@ def compileConstant(engine, caller):
 
 
 @forthprim("WORDS")
-def showWords(engine, caller):
+def showWords(engine, caller: CompiledCode):
     global vocabulary
     names = sorted(vocabulary.keys())
     print(" ".join(names))
 
+
 @forthprim("EXPECT")
-def expect(engine, caller):
+def expect(engine, caller: CompiledCode):
     txt = str(input(">"))
     engine.push(txt)
 
+
 @forthprim("SPLIT")
-def split(engine, caller):
+def split(engine, caller: CompiledCode):
     """s c ->array ...
     split a string using delimiter c
     """
@@ -626,28 +718,31 @@ def split(engine, caller):
 
 
 @forthprim("LOAD")
-def loadForth(engine, caller):
-    with open(engine.pop(), "r") as fd:
+def loadForth(engine, caller: CompiledCode):
+    with open(engine.pop(), "r", encoding="utf-8") as fd:
         engine.readFrom(fd)
 
+
 @forthprim("FORMAT")
-def formatString(engine, caller):
+def formatString(engine, caller: CompiledCode):
     """format a string , using the python format command.
     ( arg1, arg2 .. argn, formatString -> formattedResult )
     """
-    #count all open curlies in the format string
-    formatString = engine.pop()
-    nParams = formatString.count("{")
+    # count all open curlies in the format string
+    fmtString = engine.pop()
+    nParams = fmtString.count("{")
     args = [engine.stack.pop() for p in range(nParams)]
     logging.debug(args)
-    result = formatString.format(*tuple(reversed(args)))
+    result = fmtString.format(*tuple(reversed(args)))
     engine.push(result)
+
 
 # execute words
 
+
 @forthprim("'")
-def tick(engine, caller):
-    """ take the next word and put the associated method on the stack.
+def tick(engine, caller: CompiledCode):
+    """take the next word and put the associated method on the stack.
     Used for EXECUTE and MAP etc"""
     nextWord = engine.nextWord()
     if nextWord:
@@ -659,28 +754,29 @@ def tick(engine, caller):
     else:
         raise ValueError("Empty Input after tick")
 
+
 @forthprim("EXECUTE")
-def forthExecute(engine, caller):
+def forthExecute(engine, caller: CompiledCode):
     """execute the method that is on TOS"""
     method = engine.pop()
     method.execute(engine, caller)
 
 
+# Array stuff
 
-"""Array stuff"""
 
 @forthprim("[")
-def forthArrayStart(engine, caller):
+def forthArrayStart(engine, caller: CompiledCode):
     """execute the method that is on TOS"""
     engine.push("LABEL[")
 
 
 @forthprim("]")
-def forthArrayEnd(engine, caller):
+def forthArrayEnd(engine, caller: CompiledCode):
     """execute the method that is on TOS"""
-    found = False
-    result=[]
-    while len(engine.stack)>0:
+    # found = False
+    result = []
+    while len(engine.stack) > 0:
         item = engine.pop()
         if item == "LABEL[":
             break
@@ -691,8 +787,9 @@ def forthArrayEnd(engine, caller):
     else:
         raise ExecutionError("Array Expression", "Found ']' without matching '['")
 
+
 @forthprim("MAP")
-def forthArrayMap(engine, caller):
+def forthArrayMap(engine, caller: CompiledCode):
     """run a map on an array
     (arr forthWord -- )"""
     method = engine.pop()
@@ -701,26 +798,147 @@ def forthArrayMap(engine, caller):
         engine.push(item)
         method.execute(engine, caller)
 
+
 @forthprim("UNPACK")
-def forthArrayUnpack(engine, caller):
+def forthArrayUnpack(engine, caller: CompiledCode):
     """unpack an array"""
     arr = engine.pop()
     for item in reversed(arr):
         engine.push(item)
 
+
 @forthprim("PACK")
-def forthArrayUnpack(engine, caller):
+def forthArray_pack(engine, caller: CompiledCode):
     """unpack an array
     (n1 , n2, ..nx depth - arr)
     """
     depth = engine.pop()
-    result = [engine.pop() for n in range (depth)]
-    engine.push (reversed(result))
+    result = [engine.pop() for n in range(depth)]
+    engine.push(reversed(result))
 
-@forthprim ("LEN")
-def forthLen(engine, caller):
 
+@forthprim("LEN")
+def forthLen(engine, caller: CompiledCode):
     """determine the len attribute of the TOS
     ( n -- n len)
     """
     engine.push(len(engine.stack[-1]))
+
+@forthprim("MOD")
+def forthMod(engine, caller: CompiledCode):
+    """modulo function ( n1, n2 -> rest )"""
+    n1 = engine.pop()
+    n2 = engine.pop()
+    r = n2 % n1
+    engine.push(r)
+
+
+@forthprim("/MOD")
+def forthSlashMod(engine, caller: CompiledCode):
+    """modulo function ( n1, n2 -> rest qu0t)"""
+    n2 = engine.pop()
+    n1 = engine.pop()
+    q, r = divmod(n1, n2)
+    
+    engine.push(r)
+    engine.push(q)
+
+
+
+@forthprim("*/MOD")
+def forthstarSlashMod(engine, caller: CompiledCode):
+    """modulo function ( n1, n2 n3 -> rest qu0t)
+    multiplication, followed by division  n1 * n2/n3"""
+    n3 = engine.pop()
+    n2 = engine.pop()
+    n1 = engine.pop()
+    nn = n1 * n2
+    q, r = divmod(nn, n3)
+    engine.push(r)
+    engine.push(q)    
+
+
+@forthprim("*/")
+def forthstarSlash(engine, caller: CompiledCode):
+    """( n1, n2 n3 -> qu0t)
+    multiplication, followed by division  n1 * n2/n3"""
+    n3 = engine.pop()
+    n2 = engine.pop()
+    n1 = engine.pop()
+    nn = n1 * n2
+    q, r = divmod(nn, n3)
+    engine.push(q)   
+
+@forthprim("MIN")
+def forthMin(engine, caller: CompiledCode):
+    """( n1, n2 -> n)
+    smaller of the two values"""
+    n2 = engine.pop()
+    n1 = engine.pop()
+    result = min(n1, n2)
+    engine.push(result)       
+
+
+@forthprim("MAX")
+def forthMax(engine, caller: CompiledCode):
+    """( n1, n2 -> n)
+    larger of the two values"""
+    n2 = engine.pop()
+    n1 = engine.pop()
+    result = max(n1, n2)
+    engine.push(result)      
+
+@forthprim("ABS")
+def forthAbs(engine, caller: CompiledCode):
+    """( n1  -> un)
+    absolute value"""
+    n1 = engine.pop()
+    result = abs(n1)
+    engine.push(result)         
+
+
+@forthprim("MINUS")
+def forthMinus(engine, caller: CompiledCode):
+    """( n1  -> -n1)
+    absolute value"""
+    n1 = engine.pop()
+    result = - n1
+    engine.push(result)             
+
+@forthprim("1+")
+def forthOnePlus(engine, caller: CompiledCode):
+    """( n1  -> n1+1 )
+    absolute value"""
+    n1 = engine.pop()
+    result = n1 + 1
+    engine.push(result)             
+
+@forthprim("2+")
+def forthTwoPlus(engine, caller: CompiledCode):
+    """( n1  -> n1 + 2)
+    absolute value"""
+    n1 = engine.pop()
+    result = n1 + 2
+    engine.push(result)                 
+
+# LOGICAL    
+@forthprim("AND")
+def forthAND(engine, caller: CompiledCode):
+    """( n1 n2  -> n1 & 2)
+    bit logical and"""
+    n1 = engine.pop()
+    n2 = engine.pop()
+
+    result = n1 & n2
+    engine.push(result)                 
+
+@forthprim("OR")
+def forthor(engine, caller: CompiledCode):
+    """( n1 n2  -> n1 | 2)
+    bit logical and"""
+    n1 = engine.pop()
+    n2 = engine.pop()
+
+    result = n1 | n2
+    engine.push(result)                 
+

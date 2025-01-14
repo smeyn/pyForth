@@ -11,7 +11,7 @@ Options:
 """
 
 from docopt import docopt
-from Runtime import Interpreter
+from pyforth.rRuntime import Interpreter
 from os import path
 from os import listdir
 
