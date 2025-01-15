@@ -1,0 +1,5 @@
+site_name: py_forth
+nav:
+  - Home: index.md
+  - Words: words.md
+  - Architecture: architecture.md
