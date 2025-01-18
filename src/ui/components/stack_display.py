@@ -42,7 +42,7 @@ class StackDisplay(rio.Component):
                 rio.Table(
                     data = table_data
                 ),
-                rio.Text(",".join([str(item) for item in self.engine_stack])),
+                # rio.Text(",".join([str(item) for item in self.engine_stack])),
             )
 
         )

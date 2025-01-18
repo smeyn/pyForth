@@ -17,7 +17,7 @@ class WordNotFoundError  (PyForthError):
         self.message = message
 
 class ExecutionError    (PyForthError):
-    """somethign went wrong during execution of a word"""
+    """something went wrong during execution of a word"""
     def __init__(self, expression, message):
         self.expression = expression
         self.message = message

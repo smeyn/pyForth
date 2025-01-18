@@ -7,16 +7,145 @@ This is the interpreter implementation of PyForth
 @author: stephanmeyn
 """
 
-import logging
-from typing import Any
-import pyforth.primitives as primitives
-from pyforth.exceptions import CompilationError, WordNotFoundError, ExecutionError
+from __future__ import annotations
 
+import logging
+from typing import Any, Optional 
+from io import StringIO
+# import pyforth.primitives as primitives
+from pyforth.exceptions import CompilationError, WordNotFoundError, ExecutionError
+# from pyforth.primitives import MethodABC, CompiledPrimitive, CompiledCode, CompiledConstant
 # pylint: disable="invalid-name"
 # pylint: disable="logging-format-interpolation"
 # pylint: disable="missing-function-docstring"
 # pylint: disable="consider-using-f-string"
 # pylint: disable="protected-access"
+
+
+vocabulary = {}
+
+
+class MethodABC():
+    """base class for words"""
+    def __init__(
+        self,
+        name="AnonCompiled",
+        isImmediate=False,
+        executeOnly=False,
+        inColonOnly=False,
+    ):
+        """
+        :type name: str, name of the word definition
+        :type isImmediate: bool, if true then the word will be executed even if in compulation mode
+        :type executeOnly: bool, if true then the word cannot be used within a word definition
+        :type inColonOnly: bool, if true then the word cannot be used outside a word definition
+        """
+        self.isImmediate = isImmediate
+        self.executeOnly = executeOnly
+        self.inColonOnly = inColonOnly
+        self.name = name
+        self.docstring = []
+        self.meta = {}
+
+    def execute(self, engine, caller: CompiledCode):
+        raise NotImplementedError()
+
+    def appendDocQuote(self, quote):
+        """append a doc quote to the words meta information"""
+        logging.debug("adding doc string '{}'".format(quote))
+        
+        self.docstring.append(quote)
+
+class CompiledCode(MethodABC):
+    """
+    CompiledCode is an object containing the compiled code of a word.
+    """
+
+    def __init__(
+        self,
+        name="AnonCompiled",
+        isImmediate=False,
+        executeOnly=False,
+        inColonOnly=False,
+    ):
+        """
+        :type name: str, name of the word definition
+        :type isImmediate: bool, if true then the word will be executed even if in compulation mode
+        :type executeOnly: bool, if true then the word cannot be used within a word definition
+        :type inColonOnly: bool, if true then the word cannot be used outside a word definition
+        """
+        super().__init__(name=name, isImmediate=isImmediate,
+                        executeOnly=executeOnly, inColonOnly=inColonOnly,
+                        )        
+        self.code = []
+        self.xp = 0
+
+    def __str__(self):
+        result = f"CompiledPrimitive {self.name}"
+        if self.docstring:
+            doc = "\n".join(self.docstring)
+            result = f"{result}: {doc}"
+
+        return result
+
+    def showCode(self):
+        """return a string of code names"""
+        
+        names =[str(method.name) for  method in self.code]
+        return ",".join (names)
+
+
+class CompiledPrimitive(MethodABC):
+    """
+    a compiled primitive will when executed invole the function called func.
+    """
+
+    def __init__(
+        self,
+        func,
+        name="AnonPrimitive",
+        isImmediate=False,
+        executeOnly=False,
+        inColonOnly=False,
+        docString:str=''
+    ):
+        super().__init__(name=name, isImmediate=isImmediate,
+                        executeOnly=executeOnly, inColonOnly=inColonOnly,
+                        )               
+        self.func = func
+        if func.__doc__:
+            self.docstring= [func.__doc__]
+
+    def __str__(self):
+        result = f"CompiledPrimitive {self.name}"
+        if self.docstring:
+            doc = "\n".join(self.docstring)
+            result = f"{result}:\n {doc}"
+
+        return result
+
+    def execute(self, engine, caller: CallFrame):
+        # logging.debug("about to execute primitive'{}'".format(self.name))
+        self.func(engine, caller)
+
+
+class CompiledConstant(MethodABC):
+    """
+    Compiled Constants is a primitive that will push a constant on the stack
+    """
+
+    def __init__(self, constVal):
+        self.constantValue = constVal
+
+    def __str__(self):
+        return "Constant '{}'".format(self.constantValue)
+
+    @ property 
+    def name(self):
+        return f"{self}"
+    def execute(self, engine, caller: CallFrame):
+        # logging.debug("about to execute constant'{}'".format(self.constantValue))
+        engine.stack.append(self.constantValue)
 
 
 class RAM():
@@ -37,7 +166,137 @@ class RAM():
         self.mem[idx] = val
         
 
+    def append(self, item)->int:
+        """add an item to RAM and return its address"""
+        self.mem.append(item)
+        return len(self.mem)-1
 
+
+
+
+class CallFrame():
+    """invoked for every execution of a Compiled Code"""
+    def __init__(self, method:MethodABC):
+        self.method = method
+        self.xp:int=0
+        self.caller:MethodABC = None
+        self.engine: Interpreter
+        self.isCompiled:bool = False
+
+    def __str__(self):
+        return f"Call {self.method.name} at {self.xp}"
+    
+    def execute(self, engine:Interpreter, caller:MethodABC):
+        """run the method"""
+
+        self.caller = caller
+        self.engine = engine
+        if isinstance(self.method, (CompiledPrimitive, CompiledConstant)):
+            self.method.execute(engine, self)
+            return
+        self.xp = 0
+        self.isCompiled = True
+        while self.xp < len(self.method.code):
+            nextWord = self.method.code[self.xp]
+            logging.debug("execute::nextWord @{}: {}".format(self.xp, nextWord))
+            self.xp = self.xp + 1
+            try:
+                # nextWord.execute(engine, self)
+                engine.execute(nextWord, self)
+            except Exception:
+                logging.error(
+                    "Execute of word {}, xp= {}".format(self.method.name, self.xp - 1)
+                )
+                raise
+
+    @property 
+    def parent(self)->CallFrame|None:
+        """get the parent frame from the engine stack"""
+        if len(self.engine.callStack)> 1:
+            return self.engine.callStack[-2]
+        return None
+
+    #the following methods assume they are called from a primitive
+    # and hence parent is valid
+
+    @property
+    def currentWord(self):
+        return self.parent.method.code[self.xp]
+
+    def jump(self, addr):
+        """helper - move the xp pointer to this address"""        
+        self.parent.xp = addr
+
+    def jumpRelative(self, distance):
+        """helper - jump relative"""
+        self.parent.xp += distance
+
+    def branch(self):
+        """take the next primitive, which should be  a constant
+        and do a relative jump based on its value."""
+        offset = self.parent.method.code[self.parent.xp]
+        logging.debug("branching by {}".format(offset.constantValue))
+        self.jumpRelative(offset.constantValue)
+
+    # def leave(self):
+    #     """break out of the current loop"""
+    #     # move XP until (LOOP) or (+LOOP)
+    #     code  = self.parent.method.code
+    #     xp = code.xp
+    #     while xp < len(code):
+    #         next_method = code[xp]
+    #         if next_method.name == '(LOOP)'or next_method.name == '(+LOOP)':
+    #             code.xp = xp + 1
+    #             return
+    #         xp +=1
+    #     # didn't find an endloop
+    #     raise ExecutionError("Failed to find a matching LOOP or +LOOP")    
+        
+            
+            
+
+
+
+
+
+
+
+class forthprim():
+    """
+    Decorator class to decorate pyForth Primitives.
+    use to decorate a primitive implementation like this:
+
+       @forthprim('."', isImmediate=True)
+
+    this will take the next function and instantiate a CompiledPrimitive and stick it intoa vocabulary."
+    """
+
+    global vocabulary
+
+    def __init__(
+        self,
+        name,
+        isImmediate=False,
+        executeOnly=False,
+        inColonOnly=False,
+        voc=vocabulary,
+    ):
+        self.name = name
+        self.isImmediate = isImmediate
+        self.executeOnly = executeOnly
+        self.inColonOnly = inColonOnly
+        self.voc = voc
+        # print ("forthprim init for f={}".format(name))
+
+    def __call__(self, f):
+        # print("Decorating '{}->{}'".format(f.__name__, self.name))
+        self.voc[self.name] = CompiledPrimitive(
+            f,
+            name=self.name,
+            isImmediate=self.isImmediate,
+            executeOnly=self.executeOnly,
+            inColonOnly=self.inColonOnly,
+        )
 
 
 
@@ -46,35 +305,39 @@ class Interpreter(object):
     Forth interpreter
     """
 
-    def __init__(self):
+    def __init__(self, vocabulary:dict=vocabulary):
         """
         Constructor
         """
 
-        self._core_vocabulary = primitives.vocabulary
+        self._core_vocabulary = vocabulary
         self.reset()
         self.stack = []
         self.mem = RAM()
-        self.rp = []  # return pointer stack
-        self.isCompiling = False
+        self.rp:list[Any] = []  # return pointer stack
+        self.callStack:list[CallFrame]=[]
+        self.isCompiling:bool = False
         self.CLI = ""
         self.CliIdx = 0
         self.word2Compile = None
-        self.compilingMethod = None
+        self.compilingMethod:CompiledCode = None
         self.lastError = None
         self.CliInDocQuote = False
+        self.leavestack:list[list[int]]=[] # all outstandign leave addresses to be fixed up
+        if not self._core_vocabulary:
+            from pyforth import words # cause all ords to be compiled  # noqa: F401
+
 
     def run(self):
         """run the interpreter"""
         prompt = "> "
         while True:
-            # words =  str(input(PROMPT)).split()
-            # self.CLI = deque([word for word in words if word.strip()])
             self.CLI = str(input(prompt))
             self.CliIdx = 0
             self.__process_cli__()
 
-    def interpret(self, cli):
+    def interpret(self, cli:str):
+        """Interpret a string """
         savedCli = self.CLI
         savedIdx = self.CliIdx
         self.CLI = cli
@@ -82,6 +345,20 @@ class Interpreter(object):
         self.__process_cli__()
         self.CLI = savedCli
         self.CliIdx = savedIdx
+
+    def execute(self, method:MethodABC, caller:Optional[CallFrame]):
+        """execute a method"""
+        assert caller is None or isinstance(caller, CallFrame)        
+        assert isinstance(method, MethodABC), f"{method} is not a method"
+        frame = CallFrame(method)
+        try:
+            self.callStack.append(frame)
+            frame.execute(self, caller)
+        finally:
+            self.callStack.pop()
+
+
+
 
     def get_input_till(self, delimiter: str) -> str:
         """return input up to except for delimiter.
@@ -129,7 +406,8 @@ class Interpreter(object):
                                 word, "Word not allowed to be used in direct execution"
                             )
                         try:
-                            method.execute(self, None)
+                            # method.execute(self, None)
+                            self.execute(method, None)
                         except Exception as ex:
                             logging.exception(
                                 "exception during execute of word '{}'".format(word)
@@ -160,10 +438,10 @@ class Interpreter(object):
             word = self.nextWord()
 
     @property
-    def vocabulary(self):
+    def vocabulary(self)->dict:
         return self._core_vocabulary
 
-    def nextWord(self):
+    def nextWord(self)->str:
         """return the next word from the commmand line buffer"""
 
         while self.CliInDocQuote:
@@ -240,6 +518,7 @@ class Interpreter(object):
         self.CliIdx = 0
         self.stack = []
         self.rp = []
+        self.callStack = []
         self.isCompiling = False
         self.lastError = None
         self.CliInDocQuote = False
@@ -250,7 +529,7 @@ class Interpreter(object):
         :type constval: object
         """
         logging.debug("compile constant '{}'".format(constval))
-        self.compilingMethod.code.append(primitives.CompiledConstant(constval))
+        self.compilingMethod.code.append(CompiledConstant(constval))
 
     def compileMethod(self, method):
         logging.debug("compiling method references {}".format(method))
@@ -274,9 +553,9 @@ class Interpreter(object):
         logging.debug("Start Compiling")
         self.isCompiling = True
         self.word2Compile = []
-        self.compilingMethod = primitives.CompiledCode(name=methodName)
+        self.compilingMethod = CompiledCode(name=methodName)
 
-    def completeCompile(self):
+    def completeCompile(self)->None:
         """save the compiled body"""
         logging.debug(
             "completed compilation of word '{}'".format(self.compilingMethod.name)
@@ -285,7 +564,7 @@ class Interpreter(object):
         self.isCompiling = False
 
     # stack helpers
-    def push(self, value: Any):
+    def push(self, value: Any)->None:
         """
         push an item onto stack
         :param value: Object
@@ -318,13 +597,43 @@ class Interpreter(object):
 
     def __postMortem__(self):
         """log a dump"""
-        logging.debug("Stack Dump:")
+        logging.error("Call callStack Dump:")
+        for i in range(len(self.callStack)):
+            logging.error(f"{i}: {self.callStack[-i - 1]}")
+            if i > 10:
+                break
+ 
+        logging.error("Stack Dump:")
         for i in range(len(self.stack)):
-            logging.debug("{}: {}".format(i, self.stack[-i - 1]))
+            logging.error("{}: {}".format(i, self.stack[-i - 1]))
             if i > 10:
                 break
-        logging.debug("RP Dump:")
+        logging.error("RP Dump:")
         for i in range(len(self.rp)):
-            logging.debug("{}: {}".format(i, self.rp[-i - 1]))
+            logging.error("{}: {}".format(i, self.rp[-i - 1]))
             if i > 10:
                 break
+
+    #compilation support
+    def start_loop(self):
+        """resrve space for loop leave markers"""
+        logging.debug("start_loop")
+        self.leavestack.append([])
+    
+    def end_loop(self):
+        """end of loop, resolve all jumps for any leave stmts"""
+        logging.debug("end_loop")
+        code = self.compilingMethod.code
+        target_address = len(code)
+        for addr in self.leavestack[-1]:
+            dist = target_address-addr + 2
+            cc:CompiledConstant = code[addr]
+            cc.constantValue=dist
+        self.leavestack.pop()
+
+    def mark_leave(self, address:int):
+        """record the location of a jump address for a leave"""
+        logging.debug("mark_leave")
+        self.leavestack[-1].append(address)
+
+        
