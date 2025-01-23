@@ -20,6 +20,7 @@ from pyforth.exceptions import CompilationError, WordNotFoundError, ExecutionErr
 # pylint: disable="missing-function-docstring"
 # pylint: disable="consider-using-f-string"
 # pylint: disable="protected-access"
+from collections import OrderedDict
 
 
 vocabulary = {}
@@ -238,25 +239,6 @@ class CallFrame():
         logging.debug("branching by {}".format(offset.constantValue))
         self.jumpRelative(offset.constantValue)
 
-    # def leave(self):
-    #     """break out of the current loop"""
-    #     # move XP until (LOOP) or (+LOOP)
-    #     code  = self.parent.method.code
-    #     xp = code.xp
-    #     while xp < len(code):
-    #         next_method = code[xp]
-    #         if next_method.name == '(LOOP)'or next_method.name == '(+LOOP)':
-    #             code.xp = xp + 1
-    #             return
-    #         xp +=1
-    #     # didn't find an endloop
-    #     raise ExecutionError("Failed to find a matching LOOP or +LOOP")    
-        
-            
-            
-
-
-
 
 
 
@@ -309,7 +291,10 @@ class Interpreter(object):
         """
         Constructor
         """
-
+        self.vocabularies = OrderedDict()
+        self.vocabularies["FORTH"] = vocabulary        
+        self.context = "FORTH"  # start here looking for words to interpret
+        self.definitions = "FORTH"   # start here for words to compile
         self._core_vocabulary = vocabulary
         self.reset()
         self.stack = []
@@ -326,7 +311,7 @@ class Interpreter(object):
         self.leavestack:list[list[int]]=[] # all outstandign leave addresses to be fixed up
         if not self._core_vocabulary:
             from pyforth import words # cause all ords to be compiled  # noqa: F401
-
+    
 
     def run(self):
         """run the interpreter"""
@@ -357,7 +342,13 @@ class Interpreter(object):
         finally:
             self.callStack.pop()
 
+    @property 
+    def context_vocabulary(self):
+        return self.vocabularies[self.context]
 
+    @property 
+    def definitions_vocabulary(self):
+        return self.vocabularies[self.definitions]
 
 
     def get_input_till(self, delimiter: str) -> str:
@@ -383,6 +374,20 @@ class Interpreter(object):
 
         return w
 
+    def find_word(self, word)->MethodABC|None:
+        """find a word in a vocabulary"""
+        voc = self.vocabularies[self.context]
+        found = voc.get(word)
+        if found:
+            return found
+        # now go through all vocabularies
+        for custom_voc in reversed(self.vocabularies.values()):
+            found = custom_voc.get(word)
+            if found:
+                return found
+        return None
+
+
     def __process_cli__(self):
         """process a command line"""
         logging.debug("processCli start")
@@ -395,12 +400,20 @@ class Interpreter(object):
                         self.compileConstant(word[1:-1])
                     else:
                         self.push(word[1:-1])
-                elif word in self._core_vocabulary:
-                    method = self._core_vocabulary[word]
+                else:                    
+                    method = self.find_word(word)
+                    if method is None:
+                        self.reset()
+                        self.lastError = WordNotFoundError(
+                            word, "Word '{}' not found in vocabulary".format(word)
+                        )
+                        print("Word '{}' not found in vocabulary".format(word))
+                        break
+
                     if self.isCompiling and not method.isImmediate:
                         self.compileMethod(method)
                     else:
-                        method = self._core_vocabulary[word]
+                        # method = self._core_vocabulary[word]
                         if method.inColonOnly and not self.isCompiling:
                             raise ExecutionError(
                                 word, "Word not allowed to be used in direct execution"
@@ -416,14 +429,7 @@ class Interpreter(object):
                             print(ex)
                             self.reset()
                             self.lastError = ex
-                            break
-                else:
-                    self.reset()
-                    self.lastError = WordNotFoundError(
-                        word, "Word '{}' not found in vocabulary".format(word)
-                    )
-                    print("Word '{}' not found in vocabulary".format(word))
-                    break
+                            break                   
             elif isinstance(word, int) or isinstance(word, float):
                 logging.debug("next word is a number: {}".format(word))
                 if self.isCompiling:
@@ -560,7 +566,8 @@ class Interpreter(object):
         logging.debug(
             "completed compilation of word '{}'".format(self.compilingMethod.name)
         )
-        self._core_vocabulary[self.compilingMethod.name] = self.compilingMethod
+        voc = self.vocabularies[self.definitions]
+        voc[self.compilingMethod.name] = self.compilingMethod
         self.isCompiling = False
 
     # stack helpers

@@ -599,6 +599,34 @@ def compileConstant(engine, caller):
     engine.completeCompile()
 
 
+
+@forthprim("VOCABULARY", isImmediate=True)
+def mk_vocabulary(engine, caller):
+    """create a vocabulary or select it"""
+    voc_name = engine.nextWord()
+    assert voc_name not in engine.vocabularies
+    engine.vocabularies[voc_name] ={}
+    engine.startCompiling(voc_name)
+    engine.compileConstant(voc_name)
+    engine.compileWord("(VOCABULARY)")
+    engine.completeCompile()
+    engine.definitions = voc_name
+
+
+@forthprim("(VOCABULARY)")
+def invoke_vocabulary(engine, caller):
+    """create a vocabulary or select it"""
+    voc_name = engine.pop()
+    assert voc_name in engine.vocabularies
+    engine.context = voc_name
+    
+@forthprim("DEFINITIONS")
+def definitions_vocabulary(engine, caller):
+    """create a vocabulary or select it"""
+    voc_name = engine.pop()
+    assert voc_name in engine.vocabularies
+    engine.definitions = voc_name
+
 @forthprim("WORDS")
 def showWords(engine, caller):
     global vocabulary

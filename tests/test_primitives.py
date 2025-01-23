@@ -224,7 +224,7 @@ def test_While_leave():
           7 BEGIN
             1 - 
             DUP  WHILE            
-           (  DUP 2 <= IF LEAVE ENDIF)
+             DUP 2 <= IF LEAVE ENDIF
            DUP .
           REPEAT
           "ok" ;
@@ -598,6 +598,48 @@ def test_erase():
     assert interp.mem[7] is None
     assert interp.mem[8] is None
     assert interp.mem[9] == "hello"
+
+
+def test_variable():
+    interp = Interpreter()        
+    interp.interpret('15 VARIABLE hello')
+    assert len(interp.stack) == 0
+    interp.interpret('hello')
+    assert len(interp.stack) == 1
+    interp.interpret('@')
+    assert len(interp.stack) == 1
+    assert interp.stack[-1] == 15
+
+
+def test_vocabulary_basic():
+    interp = Interpreter()        
+    interp.interpret('VOCABULARY my_voc')
+    interp.interpret('my_voc')
+    interp.interpret(': example  12  ;')
+    assert len(interp.stack) == 0
+    interp.interpret('example')
+    assert len(interp.stack) == 1
+    assert interp.stack[-1] == 12
+    assert interp.context == 'my_voc'
+    assert interp.definitions == 'my_voc'
+    assert 'example' in  interp.context_vocabulary
+    assert 'my_voc' in interp.vocabularies
+
+def test_vocabulary_multi_vocabulary():
+    """compile the same word in two vocabularies"""
+    interp = Interpreter()        
+    interp.interpret('VOCABULARY my_voc1')
+    interp.interpret(': example  "from my_voc_1"  ;')
+    interp.interpret('VOCABULARY my_voc2')
+    assert interp.definitions == 'my_voc2'
+    interp.interpret(': example  "from my_voc_2"  ;')
+       
+    interp.interpret('example')    
+    assert interp.stack[-1] == "from my_voc_2"
+    interp.interpret('my_voc1')
+    assert interp.context == 'my_voc1'
+    interp.interpret('example')    
+    assert interp.stack[-1] == "from my_voc_1"
 
 
 def test_blanks():
